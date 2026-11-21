@@ -152,7 +152,7 @@ describe('temporalApiWorkflowSchema', () => {
             executionTime: '2026-01-01T00:00:00Z',
         });
         expect(parsed.success).toBe(true);
-        expect(parsed.success && Object.keys(parsed.output)).toEqual(['execution']);
+        expect(parsed.success && Object.keys(parsed.output)).toEqual(['execution', 'searchAttributes']);
     });
 });
 

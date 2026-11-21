@@ -43,6 +43,7 @@ export const EXTENSION_COLUMN_ATTR = 'data-tuis-column';
 // there, so every reader of a column key looks in one place for the vocabulary —
 // the same reason decoration.ts holds every class name this extension writes.
 export const LAST_EVENT_COLUMN_KEY = 'last-event';
+export const SNAKE_WORKFLOW_TYPE_KEY = 'workflow-type-snake-case';
 
 export type ColumnOrigin = 'native' | 'extension' | 'structural';
 

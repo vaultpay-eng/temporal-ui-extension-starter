@@ -46,6 +46,7 @@ export function normalizeExecutions(executions: unknown[]): WorkflowRow[] {
             // below fills every row that did not get one straight from the server.
             rootWorkflowId: w.rootExecution?.workflowId ?? '',
             taskQueue: w.taskQueue ?? null,
+            ...(w.searchAttributes?.indexedFields ? { searchAttributes: w.searchAttributes.indexedFields } : {}),
             depth: 0,
             segments: [],
         });

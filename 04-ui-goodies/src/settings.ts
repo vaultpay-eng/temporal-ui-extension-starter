@@ -123,8 +123,8 @@ const settingsSchema = v.object({
     // separately refusable; on by default, because they read no user data at all
     // (the retry badge deliberately does not read the failure message) and a
     // feature nobody turns on teaches nobody anything.
-    lastEventEnabled: v.fallback(v.boolean(), true),
-    retryEnabled: v.fallback(v.boolean(), true),
+    lastEventEnabled: v.fallback(v.boolean(), false),
+    retryEnabled: v.fallback(v.boolean(), false),
     // The "≠" button, and Ctrl/Cmd-additive combination for it and for Temporal's
     // own native filter button. Reads no data this extension does not already
     // show on screen and makes no request of its own — it only builds a URL — so

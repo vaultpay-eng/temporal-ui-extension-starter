@@ -56,17 +56,13 @@ const TOGGLES = [
 ] as const;
 
 describe('loadSettings', () => {
-    it('reads a stored false as off, and anything else as the shipped default', async () => {
+    it('reads stored booleans and falls back to the shipped defaults for invalid values', async () => {
         for (const field of TOGGLES) {
             expect((await load({ [field]: false }))[field], field).toBe(false);
-            // Present but not a boolean, or absent: an older popup that stored a string,
-            // a half-written object, a field that did not exist yet. The expression this
-            // replaced was `stored.x !== false`, which said "on" for every one of these,
-            // and the fallback has to keep saying it — a feature that switches itself off
-            // because a stored value has the wrong type presents as a broken feature,
-            // with a settings screen that shows it on.
+            expect((await load({ [field]: true }))[field], field).toBe(true);
             for (const junk of [undefined, 'yes', 0, null, {}]) {
-                expect((await load({ [field]: junk }))[field], `${field}=${String(junk)}`).toBe(true);
+                const defaultEnabled = field !== 'lastEventEnabled' && field !== 'retryEnabled';
+                expect((await load({ [field]: junk }))[field], `${field}=${String(junk)}`).toBe(defaultEnabled);
             }
         }
     });
@@ -80,14 +76,14 @@ describe('loadSettings', () => {
         for (const field of TOGGLES) {
             const neighbour = field === 'enabled' ? 'treeEnabled' : 'enabled';
             const settings = await load({ [field]: 'yes', [neighbour]: false, codecEndpoint: 'http://127.0.0.1:8081' });
-            expect(settings[field], field).toBe(true);
+            expect(settings[field], field).toBe(field !== 'lastEventEnabled' && field !== 'retryEnabled');
             expect(settings[neighbour], `${field} took out ${neighbour}`).toBe(false);
             expect(settings.codecEndpoint, `${field} took out codecEndpoint`).toBe('http://127.0.0.1:8081');
         }
     });
 
     it('treats only a literal true as the migration marker', async () => {
-        // The one field whose default is off, and the one that must not be inferred:
+        // A marker that must not be inferred:
         // anything other than `true` means "no human has edited this list yet", which is
         // what licenses the backfill below.
         expect((await load({ linkScopesSeeded: true })).linkScopesSeeded).toBe(true);

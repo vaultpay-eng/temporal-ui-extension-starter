@@ -26,6 +26,13 @@ export const options = {
     bundle: true,
     format: 'iife',
     target: 'chrome110',
+    // Chrome's loopback matches cover every port. Restrict them to the local UI port.
+    banner: {
+        js: `if (location.protocol === 'chrome-extension:'
+            || ['http://localhost:8233', 'http://127.0.0.1:8233'].includes(location.origin)
+            || (location.origin === 'https://cloud.temporal.io' && location.pathname.startsWith('/namespaces/'))) {`,
+    },
+    footer: { js: '}' },
     // Readable output is a feature here: this repo is meant to be read, and the
     // first thing anyone does with an unfamiliar extension is open its built
     // files in devtools. Minifying would save a few KB and cost that.

@@ -34,6 +34,7 @@
 
 import {
     FAMILY_LINK_CLASS,
+    FAMILY_HIDDEN_CLASS,
     LINK_CLASS,
     PAYLOAD_INPUT_CLASS,
     PAYLOAD_OUTPUT_CLASS,
@@ -172,6 +173,7 @@ function rowsOf(tbody: HTMLTableSectionElement): HTMLTableRowElement[] {
 export function visibleRows(tbody: HTMLTableSectionElement, lookup: PlacementLookup): WorkflowRow[] {
     const rows: WorkflowRow[] = [];
     for (const tr of rowsOf(tbody)) {
+        if (tr.classList.contains(FAMILY_HIDDEN_CLASS)) continue;
         const ids = idsFromRow(tr);
         const placement = ids ? lookup(ids.workflowId, ids.runId) : undefined;
         if (placement) rows.push(placement.row);

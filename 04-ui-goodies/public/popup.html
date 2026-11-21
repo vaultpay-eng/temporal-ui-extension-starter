@@ -77,18 +77,11 @@
                 opacity: 0.65;
             }
 
-            .link-row {
+            #codec-form {
                 display: grid;
-                grid-template-columns: 88px 1fr auto;
+                grid-template-columns: minmax(0, 1fr) auto;
                 gap: 6px;
-                margin-bottom: 6px;
-            }
-
-            /* Spans the whole link row, under the three inputs. */
-            .link-row .warning:not(:empty) {
-                grid-column: 1 / -1;
-                font-size: 11px;
-                padding-top: 2px;
+                align-items: center;
             }
 
             input[type='text'].invalid {
@@ -125,12 +118,6 @@
                 opacity: 0.85;
             }
 
-            /* The codec endpoint is a URL with a path — it needs the width. */
-            input[type='text'].wide {
-                width: 100%;
-                box-sizing: border-box;
-            }
-
             /* Not merely a hint: these say a value will not be used, or that payload
              * data will leave the browser, so they are allowed to be louder than the
              * rest. */
@@ -149,37 +136,31 @@
         </style>
     </head>
     <body>
-        <h1>Temporal UI Extension Starter <span id="version"></span></h1>
+        <h1>VaultPay Temporal UI <span id="version"></span></h1>
         <div id="status">Checking this tab…</div>
+
+        <h2><label for="codecEndpoint">Local codec server</label></h2>
+        <form id="codec-form">
+            <input type="text" inputmode="url" id="codecEndpoint" placeholder="https://codec.example.com/base"
+                aria-describedby="codec-help codec-warning" spellcheck="false" />
+            <button type="submit" id="codec-save">Save</button>
+        </form>
+        <p class="hint" id="codec-help">
+            Enter the base URL for local Temporal. Requests go to <code>/decode</code> without credentials.
+            For encrypted payloads in Temporal Cloud, open the run’s Event History.
+        </p>
+        <div class="warning" id="codec-warning" role="status"></div>
 
         <h2>Show</h2>
         <label class="row"><input type="checkbox" id="enabled" /> Enabled</label>
         <label class="row"><input type="checkbox" id="treeEnabled" /> Family tree (group children under parents)</label>
-        <label class="row"><input type="checkbox" id="familyEnabled" /> Family link, and "Expand to families"</label>
-        <p class="hint">
-            A "Family" link on every matched row, to every workflow sharing its root — including ones this page has
-            not loaded, which the family tree above cannot reach either. Also the filter-bar button that adds every
-            visible root's family to the current filter. Both only ever build a query string from root ids already
-            on the page; neither makes a request of its own.
-        </p>
-        <label class="row"><input type="checkbox" id="linksEnabled" /> Per-row deep links</label>
         <label class="row"
             ><input type="checkbox" id="columnReorderEnabled" /> Column reordering (drag or arrow keys)</label
         >
         <p class="hint">
             A grab handle beside every column's label — drag it onto another column to move it there, or focus it
-            with the keyboard and press the Left or Right arrow key. Reorders the real table; nothing is sent
-            anywhere and no column can be hidden, only moved. Off puts every column back where Temporal drew it.
-        </p>
-
-        <h2>Deep links</h2>
-        <div id="links"></div>
-        <button id="add-link" type="button">Add a link</button>
-        <p class="hint" id="link-scopes"></p>
-        <p class="hint">
-            Tokens: <code id="tokens"></code><br />
-            Add <code>:raw</code> to skip URL-encoding, and an offset to widen the window —
-            <code>{startTimeIso-10m}</code>, <code>{endTimeSec+1h}</code>.
+            with the keyboard and press the Left or Right arrow key. Use Columns on the workflow list to choose
+            which columns to show.
         </p>
 
         <h2>Payloads</h2>
@@ -218,32 +199,8 @@
             section above, on their own button, and the failure message arrives with them.
         </p>
 
-        <h2>Codec server <span class="hint">optional</span></h2>
-        <input type="text" class="wide" id="codecEndpoint" placeholder="https://codec.example.com" spellcheck="false" />
-        <div class="warning" id="codec-warning"></div>
-        <p class="hint">
-            Only needed for payloads this extension cannot read on its own — <code>binary/encrypted</code> above all.
-            Plain <code>json/plain</code> payloads are decoded in the browser and are never sent anywhere. The request is
-            the one the Temporal UI makes, apart from its two credential options — <code>POST {endpoint}/decode</code>,
-            the namespace in <code>X-Namespace</code> — so a codec server that already works there needs no change
-            unless it authenticates its callers (see below): the same URL you set under <em>Codec Server</em> in the
-            Temporal UI belongs here.
-            <strong>An empty box means no payload byte leaves this machine.</strong> When it is filled, only the payloads
-            that cannot be read in the browser are sent, and the panel names the host it sent them to, every time.
-        </p>
-        <p class="hint">
-            Unlike the Temporal UI, this extension sends <strong>no credentials to a codec server</strong> — not your
-            access token, not cookies — and cannot be made to: there is no setting for either, and the one function that
-            can post to a codec server switches cookies off itself and refuses a credential header rather than
-            forwarding it. The endpoint is chosen through a channel any script on the page can write to,
-            which is not a channel to aim a credential from. So a codec server that authenticates its callers will
-            answer <code>401</code> here and the panel will say so. Point this at one that does not, such as your own on
-            <code>localhost</code>.
-        </p>
-
         <footer>
-            A community sample. Not affiliated with or endorsed by Temporal Technologies. Requests no host permissions
-            and stores no credentials. Payloads leave this browser only if you name a codec server above.
+            Runs on local Temporal and Temporal Cloud.
         </footer>
 
         <script src="popup.js"></script>

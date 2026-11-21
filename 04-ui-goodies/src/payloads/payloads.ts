@@ -241,12 +241,15 @@ export function needsCodec(payload: RawPayload): boolean {
 // weighed against the other.
 export const MAX_DISPLAY_CHARS = 2_000_000;
 
-export function decodePayload(payload: RawPayload): string {
+export function decodePayload(
+    payload: RawPayload,
+    codecHelp = 'Set a codec server in the popup to read it.',
+): string {
     const encoding = encodingOf(payload);
     if (encoding === NULL_ENCODING) return 'null';
     if (needsCodec(payload)) {
         const bytes = base64Bytes(payload.data);
-        return `(${encoding || 'unknown encoding'} — ${bytes} bytes, not decoded here. Set a codec server in the popup to read it.)`;
+        return `(${encoding || 'unknown encoding'} — ${bytes} bytes, not decoded here. ${codecHelp})`;
     }
     // NO PARSING AND NO REFORMATTING, whatever the encoding claims. Nothing here
     // re-indents, re-orders or re-serialises a payload — not even one that says it is
@@ -262,13 +265,13 @@ export function decodePayload(payload: RawPayload): string {
     return base64ToText(payload.data ?? '');
 }
 
-export function formatPayloads(payloads: RawPayload[]): string {
+export function formatPayloads(payloads: RawPayload[], codecHelp?: string): string {
     if (payloads.length === 0) return '';
-    if (payloads.length === 1) return clip(decodePayload(payloads[0]!));
+    if (payloads.length === 1) return clip(decodePayload(payloads[0]!, codecHelp));
     // A workflow started with several arguments. Numbered, because "which
     // argument is this" is otherwise guesswork once two of them are objects.
     const parts = payloads.map(
-        (payload, index) => `── ${index + 1} of ${payloads.length} ──\n${decodePayload(payload)}`,
+        (payload, index) => `── ${index + 1} of ${payloads.length} ──\n${decodePayload(payload, codecHelp)}`,
     );
     return clip(parts.join('\n\n'));
 }

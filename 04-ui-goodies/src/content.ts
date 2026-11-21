@@ -8,8 +8,8 @@
 
 import { safeParse } from 'valibot';
 
-import { detailLinkStats, installDetailLinks, syncDetailLinks } from './detail/detailLinks';
 import { buildTree, countFamilies } from './family/tree';
+import { clearFamilyDisclosure, familyParents, syncFamilyDisclosure } from './family/disclosure';
 import {
     emptyPlacementIndex,
     findPlacement,
@@ -18,7 +18,7 @@ import {
     normalizeExecutions,
     type PlacementIndex,
 } from './family/rows';
-import { loadSettings, onSettingsChanged, saveSettings, type Settings } from './settings';
+import { loadSettings, onSettingsChanged, type Settings } from './settings';
 import { OFF_CLASS, type Placement, type RenderStats } from './decoration';
 import {
     applyToTable,
@@ -26,7 +26,6 @@ import {
     idsFromRow,
     namespaceFromLocation,
     removeAllDecoration,
-    selectedRows,
     visibleRows,
 } from './render';
 import { FRESH_FLOOR_MS, type RowInfoField } from './rowInfo/rowInfo';
@@ -42,9 +41,22 @@ import {
 } from './list/columnReorder';
 import { installFilterAugment, installNotFilter, syncNotFilterHosts } from './list/filters';
 import { findPageSizeSelect, syncPageSizeOption } from './list/pageSize';
-import { buildComparisonClause } from './list/query';
-import { syncExpandButton } from './family/expandButton';
-import { workflowsMessageSchema, type WorkflowRow } from './types';
+import { combineQuery } from './list/query';
+import { EXTENSION_COLUMN_ATTR, readColumns, SNAKE_WORKFLOW_TYPE_KEY } from './list/columns';
+import {
+    attributeKey,
+    HIDDEN_COLUMN_CLASS,
+    syncAttributeColumns,
+    syncColumnVisibility,
+    syncWorkflowTypeColumn,
+} from './list/attributeColumns';
+import { workflowColumnOrder } from './list/columnOrder';
+import { layoutFor, layoutKey, loadColumnLayouts, saveColumnLayouts, type ColumnLayout } from './list/columnLayouts';
+import { createColumnPicker, syncColumnPicker } from './list/columnPicker';
+import { QUEUE_PILLS_CLASS, listPage, listUrl, syncQueueBar } from './list/queuePills';
+import { splitQueueQuery } from './list/queueQuery';
+import { workflowsMessageSchema } from './types';
+import { TEMPORAL_CLOUD_ORIGIN } from './page/temporalApi';
 
 const TAG = '[temporal-ui-starter]';
 
@@ -55,17 +67,18 @@ let placements: PlacementIndex<Placement> = emptyPlacementIndex();
 
 // The generation of the newest list response applied — see judgeListResponse().
 let appliedGeneration = -1;
+let layouts: Record<string, ColumnLayout> = Object.create(null);
 
 let settings: Settings = {
     enabled: true,
     treeEnabled: true,
-    linksEnabled: true,
+    linksEnabled: false,
     links: [],
     payloadsEnabled: true,
-    lastEventEnabled: true,
-    retryEnabled: true,
+    lastEventEnabled: false,
+    retryEnabled: false,
     notFilterEnabled: true,
-    familyEnabled: true,
+    familyEnabled: false,
     columnOrder: [],
     columnReorderEnabled: true,
     // Empty, and that is the whole egress story until the user fills it in.
@@ -82,6 +95,8 @@ let lastStats: RenderStats = {
     retryBadges: 0,
 };
 let familyCount = 0;
+let parentsByRun: ReadonlyMap<string, string> = new Map();
+const expandedBranches = new Set<string>();
 // Runs this tab has asked Temporal about, cumulatively. Reported in the popup —
 // see the note there on why a cost gets a line of its own.
 let runsAsked = 0;
@@ -123,6 +138,7 @@ window.addEventListener('message', (event: MessageEvent) => {
 
     const ordered = buildTree(normalizeExecutions(data.executions));
     familyCount = countFamilies(ordered);
+    parentsByRun = familyParents(ordered);
 
     placements = indexPlacements(ordered, (row, index) => ({
         sequence: index,
@@ -141,6 +157,31 @@ function lookup(workflowId: string, runId: string | null): Placement | undefined
 
 // ── When to re-apply ─────────────────────────────────────────────────────────
 
+function currentLayoutKey(): string {
+    return layoutKey(splitQueueQuery(new URL(location.href).searchParams.get('query') ?? '').selected);
+}
+
+function currentLayout(): ColumnLayout {
+    return layoutFor(layouts, currentLayoutKey());
+}
+
+function saveLayout(layout: ColumnLayout): void {
+    layouts[currentLayoutKey()] = layout;
+    void saveColumnLayouts(layouts).catch((err: unknown) => console.warn(TAG, 'Could not save column preferences', err));
+    scheduleApply();
+}
+
+function navigateToFilter(clause: string): void {
+    const url = new URL(location.href);
+    location.href = listUrl(url, combineQuery(url.searchParams.get('query') ?? '', clause, true));
+}
+
+const queueBarOptions = {
+    url: () => new URL(location.href),
+    navigate: (url: string) => { location.href = url; },
+    createColumnPicker: () => createColumnPicker(document, currentLayout, saveLayout),
+};
+
 function apply(): void {
     const off = !settings.enabled;
     document.documentElement.classList.toggle(OFF_CLASS, off);
@@ -150,6 +191,11 @@ function apply(): void {
         // That includes the ROW ORDER, which removeAllDecoration puts back — a table
         // still grouped into families with the connectors gone is the same failure
         // wearing a subtler face.
+        document.querySelector(`.${QUEUE_PILLS_CLASS}`)?.remove();
+        document.querySelectorAll(`.${HIDDEN_COLUMN_CLASS}`).forEach((cell) => cell.classList.remove(HIDDEN_COLUMN_CLASS));
+        const tbody = findWorkflowTbody();
+        if (tbody) syncAttributeColumns(tbody, [], lookup, navigateToFilter);
+        document.querySelectorAll(`[${EXTENSION_COLUMN_ATTR}="${SNAKE_WORKFLOW_TYPE_KEY}"]`).forEach((cell) => cell.remove());
         removeAllDecoration();
         // And forget the payloads. removeAllDecoration() takes the panel off the
         // page, which is what a user can see; this drops the decoded text the tab
@@ -160,28 +206,19 @@ function apply(): void {
         return;
     }
 
-    // BEFORE the table, because there is no table on the page this draws on. The
-    // early return below is every page that is not the workflow list, and a single
-    // workflow's own page is exactly that — hanging these links off the same pass but
-    // after the return is how they would silently never appear.
-    syncDetailLinks({
-        // No switch of its own: these are link templates, so the links switch is the
-        // switch. Their cost is one clone and parse of a response the page fetched
-        // anyway (see detailWatch.ts), which is not worth a toggle.
-        enabled: settings.linksEnabled,
-        links: settings.links,
-        pathname: location.pathname,
-        nowMs: Date.now(),
-    });
-
+    const picker = syncQueueBar(document, queueBarOptions);
+    if (listPage(location.pathname) !== 'workflows') return;
+    const layout = currentLayout();
     const tbody = findWorkflowTbody();
-    if (!tbody) return; // every page that is not the workflow list
+    if (!tbody) {
+        if (picker) syncColumnPicker(picker, [], layout, currentLayout, saveLayout);
+        return;
+    }
 
     // Two small conveniences with no settings toggle of their own — see
     // src/list/columnCopy.ts and src/list/pageSize.ts for why: neither changes
     // what data this extension asks Temporal for, so the master switch above is
     // the only gate either one needs.
-    syncHeaderCopyButtons(tbody);
     // The room the "≠" button takes at a cell's edge, reserved on every eligible
     // cell now rather than on hover — see syncNotFilterHosts(). Its own toggle, not
     // just the master switch: off means no reserved room either.
@@ -193,13 +230,13 @@ function apply(): void {
     const nowMs = Date.now();
     lastStats = applyToTable(tbody, lookup, {
         treeEnabled: settings.treeEnabled,
-        linksEnabled: settings.linksEnabled,
-        familyEnabled: settings.familyEnabled,
-        buildFamilyHref,
+        linksEnabled: false,
+        familyEnabled: false,
+        buildFamilyHref: () => null,
         payloadsEnabled: settings.payloadsEnabled,
         lastEventEnabled: settings.lastEventEnabled,
         retryEnabled: settings.retryEnabled,
-        links: settings.links,
+        links: [],
         namespace,
         nowMs,
         // Bound to the namespace of the page being rendered. rowInfoRender.ts asks
@@ -219,8 +256,30 @@ function apply(): void {
     // Breaking it: applyToTable's syncLastEventColumn re-places "Last event" beside
     // the id column on every pass, silently undoing a drag or arrow-key move a
     // moment earlier. See docs/design-notes.md#two-owners-for-one-columns-position.
-    syncColumnOrder(tbody, settings.columnOrder, settings.columnReorderEnabled);
+    syncAttributeColumns(tbody, layout.attributes, lookup, navigateToFilter);
+    syncWorkflowTypeColumn(tbody, lookup, navigateToFilter);
+    const header = tbody.closest('table')?.tHead?.rows[0];
+    if (header) {
+        const savedOrder = layout.order.length ? layout.order : settings.columnOrder;
+        const order = workflowColumnOrder(readColumns(header), savedOrder, layout.attributes.map(attributeKey));
+        syncColumnOrder(tbody, order, settings.columnReorderEnabled);
+        const columns = readColumns(header);
+        syncColumnVisibility(tbody, columns, layout.hidden);
+        if (picker) syncColumnPicker(picker, columns, layout, currentLayout, saveLayout);
+    }
+    syncHeaderCopyButtons(tbody);
     syncColumnDragHandles(tbody, columnReorderDeps);
+    if (settings.treeEnabled) {
+        syncFamilyDisclosure(tbody, {
+            parents: parentsByRun,
+            idsFromRow,
+            lookup,
+            expanded: expandedBranches,
+            toggle: toggleBranch,
+        });
+    } else {
+        clearFamilyDisclosure(tbody);
+    }
 
     // AFTER rendering, never before: what is on the table decides what to ask
     // about, and asking is the only thing this extension does that costs the
@@ -230,44 +289,12 @@ function apply(): void {
     if (settings.lastEventEnabled) want.push('lastEvent');
     if (settings.retryEnabled) want.push('retry');
     if (want.length > 0) runsAsked += requestRowInfo(namespace, want, visibleRows(tbody, lookup), nowMs);
-
-    // The filter-bar button beside the table, not a cell inside it — see
-    // family/expandButton.ts. Every dependency is read live for the same reason
-    // installNotFilter's are: a toggle flip or a filter edit must take effect on
-    // the very next click, not the next page load.
-    syncExpandButton(document, expandDeps);
 }
 
-// Every workflow this tab currently knows about, family root included — the full
-// last-list-response set, not visibleRows()'s on-screen subset. Collecting a root
-// id costs nothing extra (family/rows.ts computes it once, when the list response
-// arrives), so "Expand to families" gets the broader, more useful set for free.
-function knownRows(): WorkflowRow[] {
-    return Array.from(placements.byRun.values()).map((placement) => placement.row);
-}
-
-// The subset of knownRows() actually checked via Temporal's own native
-// per-row checkbox right now — see render.ts's selectedRows() and
-// family/expandButton.ts's ExpandDeps for why a click prefers this outright
-// over knownRows() whenever it is non-empty. No table on screen (a
-// navigation mid-click, a page that never had one) means nothing is
-// checked, not a crash — same "decline rather than guess" shape as
-// findWorkflowTbody()'s other callers.
-function checkedRows(): WorkflowRow[] {
-    const tbody = findWorkflowTbody();
-    return tbody ? selectedRows(tbody, lookup) : [];
-}
-
-// One clause, not the OR-combination expand.ts builds — a single row's Family
-// anchor replaces the query outright, the same as clicking a plain (non-Ctrl)
-// native filter button. `null` when the id cannot be safely quoted; syncFamilyLink
-// (family/familyRender.ts) is what turns that into "no href at all" on the anchor.
-function buildFamilyHref(rootWorkflowId: string): string | null {
-    const clause = buildComparisonClause('RootWorkflowId', '=', rootWorkflowId);
-    if (clause === null) return null;
-    const url = new URL(location.href);
-    url.searchParams.set('query', clause);
-    return url.toString();
+function toggleBranch(key: string): void {
+    if (expandedBranches.has(key)) expandedBranches.delete(key);
+    else expandedBranches.add(key);
+    scheduleApply();
 }
 
 // The drag handle and the keyboard reorder it carries — installed ONCE, like
@@ -276,20 +303,8 @@ function buildFamilyHref(rootWorkflowId: string): string | null {
 // keypress.
 const columnReorderDeps: ColumnReorderDeps = {
     enabled: () => settings.enabled && settings.columnReorderEnabled,
-    currentOrder: () => settings.columnOrder,
-    saveOrder: (order) => {
-        void saveSettings({ columnOrder: [...order] });
-    },
-};
-
-const expandDeps = {
-    enabled: () => settings.enabled && settings.familyEnabled,
-    currentQuery: () => new URL(location.href).searchParams.get('query') ?? '',
-    rows: knownRows,
-    selectedRows: checkedRows,
-    navigate: (url: string) => {
-        location.href = url;
-    },
+    currentOrder: () => currentLayout().order,
+    saveOrder: (order) => saveLayout({ ...currentLayout(), order: [...order] }),
 };
 
 // The refresh control in the column header. It has to re-read the table rather than
@@ -382,7 +397,11 @@ const observer = new MutationObserver(scheduleApply);
 // ticker.
 
 async function start(): Promise<void> {
-    settings = await loadSettings();
+    const layoutLoad = loadColumnLayouts().catch((err: unknown) => {
+        console.warn(TAG, 'Could not load column preferences', err);
+        return Object.create(null);
+    });
+    [settings, layouts] = await Promise.all([loadSettings(), layoutLoad]);
     onSettingsChanged((next) => {
         const codecChanged = next.codecEndpoint !== settings.codecEndpoint;
         // A TRANSITION, not a state: this has to fire on the pass where the switch
@@ -415,10 +434,6 @@ async function start(): Promise<void> {
     // One re-render per answer that arrives. scheduleApply() coalesces them to one
     // pass per animation frame, so a burst of answers is a handful of passes.
     installRowInfo(scheduleApply);
-
-    // The same arrangement for a workflow page's own links, and the same coalescing:
-    // a history page can be observed while the UI is still rendering the last one.
-    installDetailLinks(scheduleApply);
 
     // The NOT filter, and Ctrl/Cmd-additive combination for it and for Temporal's
     // own native filter button. Installed ONCE, like the hover panel below: both
@@ -459,7 +474,7 @@ async function start(): Promise<void> {
         namespace: () => namespaceFromLocation(location.pathname) ?? '',
         // One field, and it is the only one there is. See CodecConfig in
         // payloadMessages.ts for why there is no credential switch beside it.
-        codec: () => ({ endpoint: settings.codecEndpoint }),
+        codec: () => ({ endpoint: location.origin === TEMPORAL_CLOUD_ORIGIN ? '' : settings.codecEndpoint }),
     });
 
     // We run at document_start so that no workflow-list response is missed. That
@@ -470,6 +485,13 @@ async function start(): Promise<void> {
         );
     }
     observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('popstate', scheduleApply);
+    document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement && target.type === 'checkbox' && target.closest('table')) {
+            scheduleApply();
+        }
+    });
     scheduleApply();
     console.log(TAG, 'ready');
 }
@@ -485,7 +507,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
         rowsKnown: placements.byRun.size,
         families: familyCount,
         runsAsked,
-        ...detailLinkStats(),
         ...lastStats,
     });
     return false; // responded synchronously; nothing to keep the port open for

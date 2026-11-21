@@ -62,6 +62,7 @@ export const temporalApiWorkflowSchema = v.object({
         v.object({ workflowId: v.optional(v.string()), runId: v.optional(v.string()) }),
     ),
     taskQueue: v.nullish(v.string()),
+    searchAttributes: v.nullish(v.object({ indexedFields: v.optional(v.record(v.string(), v.unknown())) })),
 });
 
 export type TemporalApiWorkflow = v.InferOutput<typeof temporalApiWorkflowSchema>;
@@ -96,6 +97,7 @@ export interface WorkflowRow {
     // parent still on this page. See resolveLocalRoots() there for the exact rule.
     rootWorkflowId: string;
     taskQueue: string | null;
+    searchAttributes?: Record<string, unknown>;
     // Filled in by buildTree(). Depth 0 = a root of a family on this page.
     depth: number;
     segments: SegmentKind[];

@@ -7,6 +7,8 @@
 // parameters are single-encoded, which is what Cloud and a self-hosted server
 // from 2.23.0 onwards expect.
 
+export const TEMPORAL_CLOUD_ORIGIN = 'https://cloud.temporal.io';
+
 // The API prefix, taken from a URL the page itself fetched.
 //
 // DERIVED, never assumed. Cloud's API lives on a per-tenant host and the OSS

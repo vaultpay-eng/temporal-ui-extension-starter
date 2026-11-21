@@ -1,3 +1,33 @@
+# VaultPay Temporal extension
+
+Build this stage from the repository root with `npm ci` and
+`npm run build --workspace=04-ui-goodies`. In Chrome, open
+`chrome://extensions`, enable Developer mode, and load `04-ui-goodies/dist`
+as an unpacked extension. When updating an installed copy, click **Reload**.
+Open the Workflows page on `http://localhost:8233` or sign in to Temporal Cloud
+and open a namespace’s Workflows page. Refresh the page after loading the extension.
+Temporal Cloud requests use your existing browser session and namespace access.
+
+- Select queue pills next to Add Filter. Select All to clear the queue selection
+  while keeping the other filters.
+- Workflow families start collapsed. Click the chevron before a parent ID
+  to show or hide its children inline. For the full tree, open the run and
+  use Temporal’s Relationships tab.
+- Open Columns to show or hide columns or add a named Temporal Search Attribute.
+  Drag the handles to reorder columns. Layouts are saved separately for each
+  queue selection.
+- Click a scalar attribute value to add its exact match to the current query.
+  The Workflow list only has values the workflow recorded in Temporal Visibility.
+  Transactions defaults to `transactionId`. Webhooks defaults to `transactionId`
+  and `provider`. Missing values appear as a dash.
+- In and Out fetch payloads on demand. In local Temporal, enter a compatible
+  codec base URL in the popup and click Save. For encrypted Cloud payloads, open
+  the run’s Event History and use the namespace’s Temporal Cloud Codec Server
+  configuration. The popup’s local codec is used only on local Temporal.
+  Last Event and retry badges are optional.
+
+---
+
 # 04 — UI goodies
 
 Everything [`../03-payloads/`](../03-payloads/) does, plus the conveniences that make
@@ -182,12 +212,12 @@ this stage is 03's, with these files changed:
 |---|---|
 | **Permissions requested** | `storage`, and nothing else — **the same permission surface as 03** |
 | **Host permissions** | none |
-| **Runs on** | `https://cloud.temporal.io/*`, `http://localhost/*`, `http://127.0.0.1/*` |
+| **Runs on** | `https://cloud.temporal.io/namespaces/*`, `http://localhost:8233`, `http://127.0.0.1:8233` |
 | **Service worker** | none |
 | **Data it reads** | everything 03 reads — nothing here reads a new kind of data; it renders, reorders or copies data this page already had a route to |
 | **Data it writes** | `chrome.storage.sync` — the same toggles and templates 03 wrote, plus this stage's own settings: `columnOrder`, `columnReorderEnabled`, `familyEnabled`, `notFilterEnabled`. No cookies, no `localStorage`, no files |
-| **Requests it makes** | the same as 03: up to two per *running* row for the `Last event` column and retry badge, plus one history event per payload question (now askable independently per direction), plus the codec POST only when you have named a server. Column reordering, the page-size option, expand-to-families, family focus, column copy and the NOT filter make **no request of their own** |
-| **Data that leaves the machine** | over the network, the same as 03: only the *undecodable* payloads of a row you hover, and only once you have named a codec server. Off the network, two new clipboard paths exist, and one of them can carry a decoded payload — see below |
+| **Requests it makes** | the same as 03: up to two per *running* row for the `Last event` column and retry badge, plus one history event per payload question (now askable independently per direction), plus a codec POST on local Temporal when you have saved an endpoint. Column reordering, the page-size option, expand-to-families, family focus, column copy and the NOT filter make **no request of their own** |
+| **Data that leaves the machine** | over the network, the same as 03: only the *undecodable* payloads of a row you hover on local Temporal, and only once you have saved a codec endpoint. Off the network, two new clipboard paths exist, and one of them can carry a decoded payload — see below |
 | **Payloads it decodes** | the same as 03. This stage changes how a decoded value is *drawn*, never how it is decoded |
 | **Credentials it holds** | none — unchanged from 03 |
 | **Whose data it will fetch** | the same ledger as 03: only the runs this page itself listed |

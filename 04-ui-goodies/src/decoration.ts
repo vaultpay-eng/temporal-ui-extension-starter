@@ -29,6 +29,9 @@ import type { SegmentKind, WorkflowRow } from './types';
 // ── What we put on the page ──────────────────────────────────────────────────
 
 export const PREFIX_CLASS = 'tuis-prefix';
+export const FAMILY_TOGGLE_CLASS = 'tuis-family-toggle';
+export const FAMILY_HIDDEN_CLASS = 'tuis-family-hidden';
+export const FAMILY_LEAF_CLASS = 'tuis-family-leaf';
 export const SEGMENT_CLASS = 'tuis-seg';
 export const LINK_CLASS = 'tuis-link';
 // A link whose template expanded to something we will not open. It still
@@ -135,6 +138,7 @@ export const EXPAND_MESSAGE_CLASS = 'tuis-expand-message';
 // with its parent, and adding it would suggest it is separately at risk.
 export const REMOVABLE_ROOT_CLASSES: readonly string[] = [
     PREFIX_CLASS,
+    FAMILY_TOGGLE_CLASS,
     LINK_CLASS,
     PAYLOAD_INPUT_CLASS,
     PAYLOAD_OUTPUT_CLASS,
@@ -180,6 +184,8 @@ export const REMOVABLE_ROOT_CLASSES: readonly string[] = [
 // elements it did NOT create. removeAllDecoration() strips these from wherever they
 // are, rather than removing the element — the element is the page's own.
 export const HOST_MARK_CLASSES: readonly string[] = [
+    FAMILY_HIDDEN_CLASS,
+    FAMILY_LEAF_CLASS,
     NOT_FILTER_HOST_CLASS,
     NOT_FILTER_HOST_NATIVE_CLASS,
     COLUMN_DROP_BEFORE_CLASS,

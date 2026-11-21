@@ -43,7 +43,7 @@ import {
 import { type PayloadRequest, type PayloadResult } from './payloadMessages';
 import { extractInput, extractOutcome, formatPayloads, type Extracted, type RawPayload } from './payloads';
 import { pacer, refuse } from '../page/requestPacing';
-import { historyUrl } from '../page/temporalApi';
+import { historyUrl, TEMPORAL_CLOUD_ORIGIN } from '../page/temporalApi';
 import { MESSAGE_SOURCE } from '../types';
 
 export async function servePayloadRequest(request: PayloadRequest): Promise<void> {
@@ -84,18 +84,20 @@ async function render(found: Extracted, request: PayloadRequest): Promise<Partia
     let payloads = found.payloads;
     let decodedBy: string | null = null;
 
-    // safeCodecEndpoint, not the raw setting: an endpoint that would put decrypted
-    // payloads on the wire in the clear is treated as no endpoint at all. And no
-    // endpoint is not an error — decodePayload() says so per payload, in place, and
-    // nothing leaves the machine.
-    const endpoint = safeCodecEndpoint(request.codec.endpoint);
+    // The popup's codec is for the local UI. Enforce that here too because page
+    // scripts can post their own payload requests.
+    const onCloud = location.origin === TEMPORAL_CLOUD_ORIGIN;
+    const endpoint = onCloud ? null : safeCodecEndpoint(request.codec.endpoint);
     const plan = planCodecCall(payloads);
     if (endpoint && plan.send.length > 0) {
         payloads = mergeDecoded(payloads, plan, await viaCodecServer(endpoint, plan.send, request));
         decodedBy = new URL(endpoint).host;
     }
 
-    const body = formatPayloads(payloads);
+    const body = formatPayloads(
+        payloads,
+        onCloud ? 'Open the run’s Event History in Temporal Cloud to decode it.' : undefined,
+    );
     const text = [found.note, body].filter((part) => part).join('\n\n');
     return { label: found.label, text: text || '(nothing recorded)', decodedBy };
 }

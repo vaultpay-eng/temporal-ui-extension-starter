@@ -16,7 +16,32 @@
 // "no preference saved yet" and "feature switched off" the same input rather
 // than two branches — see syncColumnOrder() in columnReorder.ts.
 
-import type { ColumnInfo } from './columns';
+import { SNAKE_WORKFLOW_TYPE_KEY, type ColumnInfo } from './columns';
+
+const DEFAULT_WORKFLOW_ORDER = ['Status', 'Workflow ID', 'Execution Duration', SNAKE_WORKFLOW_TYPE_KEY, 'Type', 'Workflow Type'];
+
+export function workflowColumnOrder(
+    columns: readonly ColumnInfo[],
+    saved: readonly string[],
+    attributeKeys: readonly string[],
+): string[] {
+    const missingAttributes = attributeKeys.filter((key) => !saved.includes(key));
+    const orderedColumns = columns.filter(({ key }) => !missingAttributes.includes(key));
+    const order = effectiveKeyOrder(orderedColumns, saved.length ? saved : DEFAULT_WORKFLOW_ORDER);
+
+    // Layouts saved before this column existed keep their relative order.
+    if (saved.length && !saved.includes(SNAKE_WORKFLOW_TYPE_KEY) && order.includes(SNAKE_WORKFLOW_TYPE_KEY)) {
+        order.splice(order.indexOf(SNAKE_WORKFLOW_TYPE_KEY), 1);
+        const duration = order.indexOf('Execution Duration');
+        const type = order.findIndex((key) => key === 'Type' || key === 'Workflow Type');
+        const insertAt = duration >= 0 ? duration + 1 : type >= 0 ? type : order.length;
+        order.splice(insertAt, 0, SNAKE_WORKFLOW_TYPE_KEY);
+    }
+
+    const type = order.findIndex((key) => key === 'Type' || key === 'Workflow Type');
+    order.splice(type >= 0 ? type + 1 : order.length, 0, ...missingAttributes);
+    return order;
+}
 
 // Every reorderable column's key (native or extension — never structural), in
 // the order `order` puts them: unknown keys keep their current relative order
